@@ -7,14 +7,15 @@
                         Messages
                     </div>
                      <div class="card-body p-0">
-                        <ul class="list-unstyled" style="height: 300px; overflow: scroll;">
-                            <li class="p-2" v-for="(message,index) in messages" :key="index">
+                        <ul class="list-unstyled" style="height: 300px; overflow: scroll;" v-chat-scroll>
+                            <li class="p-2" v-for="(message,index) in messages" :key="index" >
                                 <strong>{{message.user.name}}</strong>
                                 {{message.message}}
                             </li>
                         </ul>
                      </div>
                     <input
+                           @keydown="sendTypingEvent"
                            @keyup.enter="sendMessage"
                            v-model="newMessage"
                            type="text"
@@ -22,7 +23,7 @@
                            placeholder="Enter your messages..."
                            class="form-control">
                 </div>
-                <span class="text-muted">user is typing....</span>
+                <span class="text-muted" v-if="activeUser">{{activeUser.name}} is typing...</span>
 
             </div>
             <div class="col-4">
@@ -49,19 +50,36 @@
             return{
                 messages:[],
                 newMessage:'',
-                users:[]
+                users:[],
+                activeUser:false,
+                typingTimer:false,
             }
         },
         created(){
             this.fetchMessages();
             Echo.join('chat')
                 .here(user => {
-                    console.log('Here');
-                    console.log(user);
+                    this.users=user;
+                })
+                .joining(user => {
+                    this.users.push(user);
+                })
+                .leaving(user => {
+                    this.users=this.users.filter(u  =>u.id!=user.id);
                 })
                 .listen('MessageSent',(event)=>{
-                this.messages.push(event.message);
-            });
+                    this.messages.push(event.message);
+                })
+                .listenForWhisper('typing',user =>{
+                   this.activeUser=user;
+                   if(this.typingTimer)
+                   {
+                       clearTimeout(this.typingTimer);
+                   }
+                   this.typingTimer=setTimeout(()=>{
+                        this.activeUser=false;
+                   },3000)
+                });
         },
         methods:{
             fetchMessages(){
@@ -77,6 +95,9 @@
                 axios.post('messages',{message:this.newMessage});
                 this.newMessage="";
             },
+            sendTypingEvent(){
+                Echo.join('chat').whisper('typing',this.user);
+            }
 
         }
     }
